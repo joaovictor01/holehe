@@ -17,6 +17,7 @@ import sys
 import string
 import random
 import json
+import asyncio
 
 from holehe.localuseragent import ua
 from holehe.instruments import TrioProgress
@@ -109,9 +110,9 @@ def print_result(data,args,email,start_time,websites):
             return(colored(text,color))
         else:
             return(text)
-
-    description = print_color("[+] Email used","green",args) + "," + print_color(" [-] Email not used", "magenta",args) + "," + print_color(" [x] Rate limit","yellow",args) + "," + print_color(" [!] Error","red",args)
-    if args.noclear==False:
+    if args.verbose:
+        description = print_color("[+] Email used","green",args) + "," + print_color(" [-] Email not used", "magenta",args) + "," + print_color(" [x] Rate limit","yellow",args) + "," + print_color(" [!] Error","red",args)
+    if args.noclear==False and args.verbose:
         print("\033[H\033[J")
     else:
         print("\n")
@@ -146,9 +147,10 @@ def print_result(data,args,email,start_time,websites):
             websiteprint = print_color("[+] " + results["domain"] + toprint, "green",args)
             print(websiteprint)
 
-    print("\n" + description)
-    print(str(len(websites)) + " websites checked in " +
-          str(round(time.time() - start_time, 2)) + " seconds")
+    if args.verbose:
+        print("\n" + description)
+        print(str(len(websites)) + " websites checked in " +
+            str(round(time.time() - start_time, 2)) + " seconds")
 
 
 def export_csv(data,args,email):
@@ -162,6 +164,71 @@ def export_csv(data,args,email):
             fc.writeheader()
             fc.writerows(data)
         exit("All results have been exported to "+name_file)
+
+def export_json(data,args,email):
+    """Export result to csv"""
+    if args.jsonoutput == True:
+        now = datetime.now()
+        timestamp = datetime.timestamp(now)
+        name_file="holehe_"+str(round(timestamp))+"_"+email+"_results.json"
+        sites = []
+        for key in data:
+            if data[key].get("exists") == True:
+                sites.append(key)
+        with open(name_file, 'w', encoding='utf8', newline='') as output_file:
+            pass
+
+        exit("All results have been exported to "+name_file)
+
+
+def get_list_of_sites_with_email_used(data):
+    sites = []
+    for element in data:
+        site = element.get("name")
+        if element.get("exists") == True:
+            sites.append(site)
+        if (others := element.get("others")):
+            if "http" in str(others):
+                other_sites = (
+                    re.findall(
+                    (
+                        'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\), ]|'
+                        '(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+                    ),
+                    str(others))
+                )
+                sites += other_sites
+    print(sites)
+    return sites
+
+async def get_sites_with_email_used(email: str):
+    modules = import_submodules("holehe.modules")
+    websites = get_functions(modules, None)
+    # Get timeout
+    timeout=30
+    # Start time
+    start_time = time.time()
+    # Def the async client
+    client = httpx.AsyncClient(timeout=timeout)
+    # Launching the modules
+    out = []
+    async with trio.open_nursery() as nursery:
+        for website in websites:
+            nursery.start_soon(launch_module, website, email, client, out)
+    # Sort by modules names
+    out = sorted(out, key=lambda i: i['name'])
+    # Close the client
+    await client.aclose()
+    # Export results
+    return get_list_of_sites_with_email_used(out)
+
+
+def get_list_sites_with_email(email: str):
+    async def asyncfunc():
+        return await get_sites_with_email_used(email)
+    sites = asyncio.run(asyncfunc())
+    print(sites)
+    return sites
 
 async def launch_module(module,email, client, out):
     data={'aboutme': 'about.me', 'adobe': 'adobe.com', 'amazon': 'amazon.com', 'anydo': 'any.do', 'archive': 'archive.org', 'armurerieauxerre': 'armurerie-auxerre.com', 'atlassian': 'atlassian.com', 'babeshows': 'babeshows.co.uk', 'badeggsonline': 'badeggsonline.com', 'biosmods': 'bios-mods.com', 'biotechnologyforums': 'biotechnologyforums.com', 'bitmoji': 'bitmoji.com', 'blablacar': 'blablacar.com', 'blackworldforum': 'blackworldforum.com', 'blip': 'blip.fm', 'blitzortung': 'forum.blitzortung.org', 'bluegrassrivals': 'bluegrassrivals.com', 'bodybuilding': 'bodybuilding.com', 'buymeacoffee': 'buymeacoffee.com', 'cambridgemt': 'discussion.cambridge-mt.com', 'caringbridge': 'caringbridge.org', 'chinaphonearena': 'chinaphonearena.com', 'clashfarmer': 'clashfarmer.com', 'codecademy': 'codecademy.com', 'codeigniter': 'forum.codeigniter.com', 'codepen': 'codepen.io', 'coroflot': 'coroflot.com', 'cpaelites': 'cpaelites.com', 'cpahero': 'cpahero.com', 'cracked_to': 'cracked.to', 'crevado': 'crevado.com', 'deliveroo': 'deliveroo.com', 'demonforums': 'demonforums.net', 'devrant': 'devrant.com', 'diigo': 'diigo.com', 'discord': 'discord.com', 'docker': 'docker.com', 'dominosfr': 'dominos.fr', 'ebay': 'ebay.com', 'ello': 'ello.co', 'envato': 'envato.com', 'eventbrite': 'eventbrite.com', 'evernote': 'evernote.com', 'fanpop': 'fanpop.com', 'firefox': 'firefox.com', 'flickr': 'flickr.com', 'freelancer': 'freelancer.com', 'freiberg': 'drachenhort.user.stunet.tu-freiberg.de', 'garmin': 'garmin.com', 'github': 'github.com', 'google': 'google.com', 'gravatar': 'gravatar.com', 'imgur': 'imgur.com', 'instagram': 'instagram.com', 'issuu': 'issuu.com', 'koditv': 'forum.kodi.tv', 'komoot': 'komoot.com', 'laposte': 'laposte.fr', 'lastfm': 'last.fm', 'lastpass': 'lastpass.com', 'mail_ru': 'mail.ru', 'mybb': 'community.mybb.com', 'myspace': 'myspace.com', 'nattyornot': 'nattyornotforum.nattyornot.com', 'naturabuy': 'naturabuy.fr', 'ndemiccreations': 'forum.ndemiccreations.com', 'nextpvr': 'forums.nextpvr.com', 'nike': 'nike.com', 'odnoklassniki': 'ok.ru', 'office365': 'office365.com', 'onlinesequencer': 'onlinesequencer.net', 'parler': 'parler.com', 'patreon': 'patreon.com', 'pinterest': 'pinterest.com', 'plurk': 'plurk.com', 'pornhub': 'pornhub.com', 'protonmail': 'protonmail.ch', 'quora': 'quora.com', 'rambler': 'rambler.ru', 'redtube': 'redtube.com', 'replit': 'replit.com', 'rocketreach': 'rocketreach.co', 'samsung': 'samsung.com', 'seoclerks': 'seoclerks.com', 'sevencups': '7cups.com', 'smule': 'smule.com', 'snapchat': 'snapchat.com', 'soundcloud': 'soundcloud.com', 'sporcle': 'sporcle.com', 'spotify': 'spotify.com', 'strava': 'strava.com', 'taringa': 'taringa.net', 'teamtreehouse': 'teamtreehouse.com', 'tellonym': 'tellonym.me', 'thecardboard': 'thecardboard.org', 'therianguide': 'forums.therian-guide.com', 'thevapingforum': 'thevapingforum.com', 'tumblr': 'tumblr.com', 'tunefind': 'tunefind.com', 'twitter': 'twitter.com', 'venmo': 'venmo.com', 'vivino': 'vivino.com', 'voxmedia': 'voxmedia.com', 'vrbo': 'vrbo.com', 'vsco': 'vsco.co', 'wattpad': 'wattpad.com', 'wordpress': 'wordpress.com', 'xing': 'xing.com', 'xnxx': 'xnxx.com', 'xvideos': 'xvideos.com', 'yahoo': 'yahoo.com','hubspot': 'hubspot.com', 'pipedrive': 'pipedrive.com', 'insightly': 'insightly.com', 'nutshell': 'nutshell.com', 'zoho': 'zoho.com', 'axonaut': 'axonaut.com', 'amocrm': 'amocrm.com', 'nimble': 'nimble.com', 'nocrm': 'nocrm.io', 'teamleader': 'teamleader.eu'}
@@ -193,10 +260,15 @@ async def maincore():
                     help="Create a CSV with the results")
     parser.add_argument("-T","--timeout", type=int , default=10, required=False,dest="timeout",
                     help="Set max timeout value (default 10)")
+    parser.add_argument("-J","--json", default=False, required=False,action="store_true",dest="jsonoutput",
+                    help="Create a JSON with the results")
+    parser.add_argument("-V","--verbose", default=False, required=False,action="store_true",dest="verbose",
+                    help="Verbose scan")
+    parser.add_argument("--only-sites", default=False, required=False,action="store_true",dest="onlysites",
+                    help="Print only sites used by the target email address.")
 
     check_update()
     args = parser.parse_args()
-    credit()
     email=args.email[0]
 
     if not is_email(email):
@@ -213,21 +285,19 @@ async def maincore():
     client = httpx.AsyncClient(timeout=timeout)
     # Launching the modules
     out = []
-    instrument = TrioProgress(len(websites))
-    trio.lowlevel.add_instrument(instrument)
     async with trio.open_nursery() as nursery:
         for website in websites:
             nursery.start_soon(launch_module, website, email, client, out)
-    trio.lowlevel.remove_instrument(instrument)
     # Sort by modules names
     out = sorted(out, key=lambda i: i['name'])
     # Close the client
     await client.aclose()
-    # Print the result
-    print_result(out,args,email,start_time,websites)
-    credit()
     # Export results
     export_csv(out,args,email)
+    if args.onlysites:
+        get_list_of_sites_with_email_used(out)
+    else:
+        print_result(out,args,email,start_time,websites)
 
 def main():
     trio.run(maincore)
